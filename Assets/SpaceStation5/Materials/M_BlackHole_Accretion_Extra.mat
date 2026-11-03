@@ -29,11 +29,11 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _DopplerIntensity: 0.65
+    - _DopplerIntensity: 0.85
     - _EmissionBoost: 5.2
     - _SwirlSpeed: -0.45
-    - _TurbulenceFreq: 8
-    - _TurbulenceSpeed: 0.5
+    - _TurbulenceFreq: 10
+    - _TurbulenceSpeed: 0.6
     m_Colors:
     - _CoreColor: {r: 6.5, g: 4, b: 1.5, a: 1}
     - _InnerColor: {r: 4.5, g: 1.6, b: 0.35, a: 1}

@@ -1,10 +1,12 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.XR;
 
 namespace SpaceStation5
 {
     /// <summary>
     /// Robust First Person Controller with collision, head bobbing, flashlight, and New Input System support.
+    /// Supports both standard desktop keyboard/mouse and full Meta Quest VR head/controller tracking with snap/continuous turns.
     /// Scaled to standard 1.8m human height.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
@@ -20,6 +22,7 @@ namespace SpaceStation5
         public float mouseSensitivity = 0.15f;
         public float lookUpLimit = 85.0f;
         public float lookDownLimit = -85.0f;
+        public float vrSnapTurnAngle = 45.0f;
 
         [Header("Head Bobbing")]
         public bool enableHeadBob = true;
@@ -39,6 +42,7 @@ namespace SpaceStation5
         private float verticalRotation = 0f;
         private Vector3 defaultCameraLocalPos;
         private float bobTimer = 0f;
+        private bool vrSnapTurnReset = true;
 
         private void Awake()
         {
@@ -86,18 +90,45 @@ namespace SpaceStation5
 
         private void HandleRotation()
         {
-            // In VR with an active XR display, head tracking is handled physically by TrackedPoseDriver
-            if (UnityEngine.XR.XRSettings.isDeviceActive)
+            bool isVR = UnityEngine.XR.XRSettings.isDeviceActive;
+
+            // In VR with an active XR display, head rotation is driven directly by the XR device tracking
+            if (isVR)
             {
-                var gp = Gamepad.current;
-                if (gp != null)
+                float turnInput = 0f;
+
+                // 1. Check XR Right Hand controller primary2DAxis
+                var rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+                if (rightHandDevice.isValid && rightHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out Vector2 rightStick))
                 {
-                    float stickX = gp.rightStick.ReadValue().x;
-                    if (Mathf.Abs(stickX) > 0.2f)
+                    turnInput = rightStick.x;
+                }
+
+                // 2. Fallback to Gamepad right stick
+                if (Mathf.Abs(turnInput) < 0.1f)
+                {
+                    var gp = Gamepad.current;
+                    if (gp != null)
                     {
-                        transform.Rotate(Vector3.up * stickX * 90f * Time.deltaTime);
+                        turnInput = gp.rightStick.ReadValue().x;
                     }
                 }
+
+                // Snap Turn handling
+                if (Mathf.Abs(turnInput) > 0.5f)
+                {
+                    if (vrSnapTurnReset)
+                    {
+                        float angle = Mathf.Sign(turnInput) * vrSnapTurnAngle;
+                        transform.Rotate(Vector3.up * angle);
+                        vrSnapTurnReset = false;
+                    }
+                }
+                else if (Mathf.Abs(turnInput) < 0.2f)
+                {
+                    vrSnapTurnReset = true;
+                }
+
                 return;
             }
 
@@ -148,7 +179,32 @@ namespace SpaceStation5
                 jumpPressed = kb.spaceKey.wasPressedThisFrame;
             }
 
-            // Also support Gamepad / VR Controller Thumbsticks
+            // VR Left Controller Thumbstick
+            var leftHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            if (leftHandDevice.isValid)
+            {
+                if (leftHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxis, out Vector2 moveStick))
+                {
+                    horizontal += moveStick.x;
+                    vertical += moveStick.y;
+                }
+                if (leftHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primary2DAxisClick, out bool thumbClick) && thumbClick)
+                {
+                    isSprinting = true;
+                }
+            }
+
+            // VR Right Controller Button (A button = primaryButton) for Jump
+            var rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+            if (rightHandDevice.isValid)
+            {
+                if (rightHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool aBtn) && aBtn)
+                {
+                    jumpPressed = true;
+                }
+            }
+
+            // Also support Gamepad
             var gp = Gamepad.current;
             if (gp != null)
             {
@@ -161,7 +217,16 @@ namespace SpaceStation5
 
             float currentSpeed = isSprinting ? sprintSpeed : walkSpeed;
 
-            Vector3 move = transform.right * horizontal + transform.forward * vertical;
+            // Move relative to player transform (or player camera if in VR)
+            Vector3 forward = transform.forward;
+            Vector3 right = transform.right;
+            if (playerCamera != null && UnityEngine.XR.XRSettings.isDeviceActive)
+            {
+                forward = Vector3.ProjectOnPlane(playerCamera.transform.forward, Vector3.up).normalized;
+                right = Vector3.ProjectOnPlane(playerCamera.transform.right, Vector3.up).normalized;
+            }
+
+            Vector3 move = right * horizontal + forward * vertical;
             if (move.sqrMagnitude > 1f) move.Normalize();
 
             if (jumpPressed && isGrounded)
@@ -209,8 +274,22 @@ namespace SpaceStation5
 
         private void HandleFlashlight()
         {
+            bool toggle = false;
+
             var kb = Keyboard.current;
-            if (kb != null && flashlight != null && kb.fKey.wasPressedThisFrame)
+            if (kb != null && kb.fKey.wasPressedThisFrame)
+            {
+                toggle = true;
+            }
+
+            // VR Controller Y Button or Secondary Button
+            var leftHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            if (leftHandDevice.isValid && leftHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.secondaryButton, out bool yBtn) && yBtn)
+            {
+                toggle = true;
+            }
+
+            if (toggle && flashlight != null)
             {
                 flashlight.enabled = !flashlight.enabled;
             }

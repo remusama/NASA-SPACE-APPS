@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 
@@ -1874,6 +1874,15 @@ namespace SpaceStation5
                 Object.DestroyImmediate(oldCam);
             }
 
+            // Ensure XR Interaction Manager exists in the scene
+            var existingMgr = Object.FindAnyObjectByType<UnityEngine.XR.Interaction.Toolkit.XRInteractionManager>();
+            if (existingMgr == null)
+            {
+                GameObject mgrObj = new GameObject("XR Interaction Manager");
+                mgrObj.AddComponent<UnityEngine.XR.Interaction.Toolkit.XRInteractionManager>();
+                mgrObj.transform.SetParent(parent.transform, false);
+            }
+
             // Find primary spawn bay if available (prioritize central Command Rotunda)
             Vector3 spawnPosition = new Vector3(0, 1.2f, 6.0f);
             Quaternion spawnRotation = Quaternion.identity;
@@ -1900,15 +1909,26 @@ namespace SpaceStation5
             cc.radius = 0.4f;
             cc.center = new Vector3(0, 0.9f, 0);
 
+            // XR Origin configuration
+            var xrOrigin = player.AddComponent<Unity.XR.CoreUtils.XROrigin>();
+            xrOrigin.RequestedTrackingOriginMode = Unity.XR.CoreUtils.XROrigin.TrackingOriginMode.Floor;
+
+            // Camera Offset hierarchy
+            GameObject camOffset = new GameObject("Camera Offset");
+            camOffset.transform.SetParent(player.transform, false);
+            xrOrigin.CameraFloorOffsetObject = camOffset;
+
+            // Main Camera (Head Tracking)
             GameObject camObj = new GameObject("Main Camera");
             camObj.tag = "MainCamera";
-            camObj.transform.SetParent(player.transform, false);
+            camObj.transform.SetParent(camOffset.transform, false);
             camObj.transform.localPosition = new Vector3(0, 1.7f, 0);
 
             Camera cam = camObj.AddComponent<Camera>();
             cam.nearClipPlane = 0.05f;
             cam.farClipPlane = 25000f;
             camObj.AddComponent<AudioListener>();
+            xrOrigin.Camera = cam;
 
             var uac = camObj.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
             uac.renderPostProcessing = true;
@@ -1916,6 +1936,7 @@ namespace SpaceStation5
             var tpd = camObj.AddComponent<UnityEngine.InputSystem.XR.TrackedPoseDriver>();
             tpd.trackingType = UnityEngine.InputSystem.XR.TrackedPoseDriver.TrackingType.RotationAndPosition;
 
+            // Flashlight on headlamp
             GameObject lightObj = new GameObject("Headlamp_Flashlight");
             lightObj.transform.SetParent(camObj.transform, false);
             lightObj.transform.localPosition = new Vector3(0.2f, -0.1f, 0.3f);
@@ -1926,6 +1947,100 @@ namespace SpaceStation5
             flash.range = 35f;
             flash.spotAngle = 55f;
             flash.intensity = 1.8f;
+
+            // Load XRI Default Input Actions
+            var xriActions = AssetDatabase.LoadAssetAtPath<UnityEngine.InputSystem.InputActionAsset>(
+                "Assets/Samples/XR Interaction Toolkit/3.2.1/Starter Assets/XRI Default Input Actions.inputactions");
+
+            if (xriActions != null)
+            {
+                var inputActionMgr = player.AddComponent<UnityEngine.XR.Interaction.Toolkit.Inputs.InputActionManager>();
+                inputActionMgr.actionAssets = new List<UnityEngine.InputSystem.InputActionAsset> { xriActions };
+            }
+
+            // Left Hand Controller
+            GameObject leftHand = new GameObject("Left Hand");
+            leftHand.transform.SetParent(camOffset.transform, false);
+            leftHand.transform.localPosition = new Vector3(-0.25f, 1.2f, 0.4f);
+            var leftTpd = leftHand.AddComponent<UnityEngine.InputSystem.XR.TrackedPoseDriver>();
+            leftTpd.trackingType = UnityEngine.InputSystem.XR.TrackedPoseDriver.TrackingType.RotationAndPosition;
+
+            // Right Hand Controller
+            GameObject rightHand = new GameObject("Right Hand");
+            rightHand.transform.SetParent(camOffset.transform, false);
+            rightHand.transform.localPosition = new Vector3(0.25f, 1.2f, 0.4f);
+            var rightTpd = rightHand.AddComponent<UnityEngine.InputSystem.XR.TrackedPoseDriver>();
+            rightTpd.trackingType = UnityEngine.InputSystem.XR.TrackedPoseDriver.TrackingType.RotationAndPosition;
+
+            // Wire input action references to TrackedPoseDrivers
+            if (xriActions != null)
+            {
+                var headPos = xriActions.FindAction("XRI Head/Position");
+                var headRot = xriActions.FindAction("XRI Head/Rotation");
+                var headState = xriActions.FindAction("XRI Head/Tracking State");
+                if (headPos != null) tpd.positionInput = new UnityEngine.InputSystem.InputActionProperty(headPos);
+                if (headRot != null) tpd.rotationInput = new UnityEngine.InputSystem.InputActionProperty(headRot);
+                if (headState != null) tpd.trackingStateInput = new UnityEngine.InputSystem.InputActionProperty(headState);
+
+                var leftPos = xriActions.FindAction("XRI Left/Position");
+                var leftRot = xriActions.FindAction("XRI Left/Rotation");
+                var leftState = xriActions.FindAction("XRI Left/Tracking State");
+                if (leftPos != null) leftTpd.positionInput = new UnityEngine.InputSystem.InputActionProperty(leftPos);
+                if (leftRot != null) leftTpd.rotationInput = new UnityEngine.InputSystem.InputActionProperty(leftRot);
+                if (leftState != null) leftTpd.trackingStateInput = new UnityEngine.InputSystem.InputActionProperty(leftState);
+
+                var rightPos = xriActions.FindAction("XRI Right/Position");
+                var rightRot = xriActions.FindAction("XRI Right/Rotation");
+                var rightState = xriActions.FindAction("XRI Right/Tracking State");
+                if (rightPos != null) rightTpd.positionInput = new UnityEngine.InputSystem.InputActionProperty(rightPos);
+                if (rightRot != null) rightTpd.rotationInput = new UnityEngine.InputSystem.InputActionProperty(rightRot);
+                if (rightState != null) rightTpd.trackingStateInput = new UnityEngine.InputSystem.InputActionProperty(rightState);
+            }
+
+            // Visual Controller Models
+            GameObject leftControllerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Samples/XR Interaction Toolkit/3.2.1/Starter Assets/Prefabs/Controllers/XR Controller Left.prefab");
+            if (leftControllerPrefab != null)
+            {
+                GameObject leftVis = (GameObject)PrefabUtility.InstantiatePrefab(leftControllerPrefab, leftHand.transform);
+                leftVis.name = "XR Controller Left Visual";
+                leftVis.transform.localPosition = Vector3.zero;
+                leftVis.transform.localRotation = Quaternion.identity;
+            }
+
+            GameObject rightControllerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Samples/XR Interaction Toolkit/3.2.1/Starter Assets/Prefabs/Controllers/XR Controller Right.prefab");
+            if (rightControllerPrefab != null)
+            {
+                GameObject rightVis = (GameObject)PrefabUtility.InstantiatePrefab(rightControllerPrefab, rightHand.transform);
+                rightVis.name = "XR Controller Right Visual";
+                rightVis.transform.localPosition = Vector3.zero;
+                rightVis.transform.localRotation = Quaternion.identity;
+            }
+
+            // Hand Interactors (Direct Interactor for grasping and UI Poke)
+            GameObject directInterPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Samples/XR Interaction Toolkit/3.2.1/Starter Assets/Prefabs/Interactors/Direct Interactor.prefab");
+            if (directInterPrefab != null)
+            {
+                GameObject leftDirect = (GameObject)PrefabUtility.InstantiatePrefab(directInterPrefab, leftHand.transform);
+                leftDirect.name = "Direct Interactor";
+                leftDirect.transform.localPosition = Vector3.zero;
+
+                GameObject rightDirect = (GameObject)PrefabUtility.InstantiatePrefab(directInterPrefab, rightHand.transform);
+                rightDirect.name = "Direct Interactor";
+                rightDirect.transform.localPosition = Vector3.zero;
+            }
+
+            // Ray Interactor for UI navigation & distance interactions
+            GameObject rayInterPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Samples/XR Interaction Toolkit/3.2.1/Starter Assets/Prefabs/Interactors/Ray Interactor.prefab");
+            if (rayInterPrefab != null)
+            {
+                GameObject rightRay = (GameObject)PrefabUtility.InstantiatePrefab(rayInterPrefab, rightHand.transform);
+                rightRay.name = "Ray Interactor";
+                rightRay.transform.localPosition = Vector3.zero;
+            }
 
             SpaceStationPlayerController fps = player.AddComponent<SpaceStationPlayerController>();
             fps.playerCamera = cam;
