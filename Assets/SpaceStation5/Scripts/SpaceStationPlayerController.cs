@@ -43,6 +43,8 @@ namespace SpaceStation5
         private Vector3 defaultCameraLocalPos;
         private float bobTimer = 0f;
         private bool vrSnapTurnReset = true;
+        private bool vrJumpHeld;
+        private bool vrFlashlightHeld;
 
         private void Awake()
         {
@@ -194,15 +196,22 @@ namespace SpaceStation5
                 }
             }
 
-            // VR Right Controller Button (A button = primaryButton) for Jump
+            // VR Right Controller Button (A button = primaryButton) for Jump.
+            // Use an edge so holding the button does not bunny-hop every frame.
             var rightHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
-            if (rightHandDevice.isValid)
+            bool vrJumpHeldNow = false;
+            if (rightHandDevice.isValid &&
+                rightHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool aBtn))
             {
-                if (rightHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool aBtn) && aBtn)
-                {
-                    jumpPressed = true;
-                }
+                vrJumpHeldNow = aBtn;
             }
+
+            if (vrJumpHeldNow && !vrJumpHeld)
+            {
+                jumpPressed = true;
+            }
+
+            vrJumpHeld = vrJumpHeldNow;
 
             // Also support Gamepad
             var gp = Gamepad.current;
@@ -282,12 +291,22 @@ namespace SpaceStation5
                 toggle = true;
             }
 
-            // VR Controller Y Button or Secondary Button
+            // VR Controller Y Button or Secondary Button. Edge-triggered so the light does
+            // not flicker while the button is held down.
             var leftHandDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
-            if (leftHandDevice.isValid && leftHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.secondaryButton, out bool yBtn) && yBtn)
+            bool vrFlashlightHeldNow = false;
+            if (leftHandDevice.isValid &&
+                leftHandDevice.TryGetFeatureValue(UnityEngine.XR.CommonUsages.secondaryButton, out bool yBtn))
+            {
+                vrFlashlightHeldNow = yBtn;
+            }
+
+            if (vrFlashlightHeldNow && !vrFlashlightHeld)
             {
                 toggle = true;
             }
+
+            vrFlashlightHeld = vrFlashlightHeldNow;
 
             if (toggle && flashlight != null)
             {

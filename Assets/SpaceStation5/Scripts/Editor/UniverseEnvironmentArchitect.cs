@@ -22,6 +22,11 @@ namespace SpaceStation5
         [UnityEditor.Callbacks.DidReloadScripts]
         public static void OnScriptsReloaded()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isPlaying)
+            {
+                return;
+            }
+
             BuildUniverseAndBlackHole();
         }
 
@@ -32,6 +37,11 @@ namespace SpaceStation5
 
         private static void OnEditorReady()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isPlaying)
+            {
+                return;
+            }
+
             BuildUniverseAndBlackHole();
         }
 

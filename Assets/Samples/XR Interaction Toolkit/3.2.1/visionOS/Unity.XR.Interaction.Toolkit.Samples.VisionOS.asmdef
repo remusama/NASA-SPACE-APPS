@@ -13,7 +13,9 @@
         "Unity.XR.Interaction.Toolkit.Samples.StarterAssets",
         "Unity.TextMeshPro"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "VisionOS"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,

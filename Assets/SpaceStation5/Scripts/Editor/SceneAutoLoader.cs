@@ -19,6 +19,14 @@ namespace SpaceStation5.Editor
 
         private static void CheckAndRebuildIfEmpty()
         {
+            // Never rebuild authoring content while entering or running Play Mode. The play-mode
+            // scene loads asynchronously, so the checks below can see an empty scene and would
+            // rebuild/dirty the real scene (and throw "This cannot be used during play mode").
+            if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isPlaying)
+            {
+                return;
+            }
+
             Scene activeScene = SceneManager.GetActiveScene();
             
             // Si la escena activa no es la principal, abrirla
